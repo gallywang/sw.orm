@@ -14,6 +14,8 @@ namespace sw.orm
 {
     internal class SqlClient : DBClient
     {
+        #region 初始化
+
         /// <summary>
         /// 数据库处理类
         /// </summary>
@@ -22,7 +24,7 @@ namespace sw.orm
         /// <summary>
         /// 数据库连接字符串
         /// </summary>
-        private string _coon;
+        private string _conn;
 
         /// <summary>
         /// 初始化
@@ -31,7 +33,7 @@ namespace sw.orm
         /// <param name="dBType"></param>
         public SqlClient(string strConn, DBType dBType)
         {
-            _coon = strConn;
+            _conn = strConn;
             if (dBType == DBType.SQLServer)
             {
                 sqlHelper = new SqlHelper(strConn);
@@ -51,8 +53,10 @@ namespace sw.orm
         /// </summary>
         public string CurConnection
         {
-            get { return _coon; }
+            get { return _conn; }
         }
+
+        #endregion
 
         #region 插入
 
@@ -92,10 +96,8 @@ namespace sw.orm
             {
                 return SWErrorCode.ParamsEmpty;
             }
-
             List<string> sqlList = new List<string>();
             List<List<SWDbParameter>> parametersList = new List<List<SWDbParameter>>();
-
             for (int i = 0,count = tParameter.Count;i < count; i++)
             {
                 List<SWDbParameter> parameters = new List<SWDbParameter>();
@@ -107,7 +109,6 @@ namespace sw.orm
                 sqlList.Add(sql);
                 parametersList.Add(parameters);
             }
-
             if (sqlHelper.ExecTrans(sqlList, parametersList))
             {
                 return sqlList.Count;
@@ -147,7 +148,7 @@ namespace sw.orm
         }
 
         /// <summary>
-        /// 更新(以主键为条件更新)
+        /// 更新集合(以主键为条件更新)
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <param name="tParameter"></param>
@@ -331,19 +332,48 @@ namespace sw.orm
             return sqlHelper.ExecuteQuery(sql, parameters);
         }
 
+        /// <summary>
+        /// 根据Where条件删除，条件为空时删除所有记录
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="where"></param>
+        /// <returns></returns>
+        public override int Delete<T>(Where<T> where)
+        {
+            if (where == null || where.GetExpression() == null)
+            {
+                return SWErrorCode.SqlError;
+            }
+            List<SWDbParameter> parameters = new List<SWDbParameter>();
+            string sql = DeleteSqlBuilder.Delete<T>(where.GetExpression(), ref parameters);
+            if (string.IsNullOrEmpty(sql))
+            {
+                return SWErrorCode.SqlError;
+            }
+            return sqlHelper.ExecuteQuery(sql, parameters);
+        }
+
         #endregion
 
         #region 查询
 
+        #region 查询单条记录
+
         /// <summary>
-        /// 获取单条记录
+        /// 根据条件获取单条记录
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <param name="expression"></param>
         /// <returns></returns>
         public override T GetModel<T>(Expression<Func<T, bool>> expression)
         {
-            List<T> ts = GetModelList<T, bool>(expression, "", null, 1);
+            //查询参数
+            SearchParameter<T, bool> searchParameter = new SearchParameter<T, bool>
+            {
+                FilterExp = expression,
+                Top = 1
+            };
+            List<T> ts = GetModelList(searchParameter);
             if (ts != null && ts.Count > 0)
             {
                 return ts[0];
@@ -361,11 +391,10 @@ namespace sw.orm
         {
             List<SWDbParameter> parameters = new List<SWDbParameter>();
             string sql = SearchSqlBuilder.GetModel<T>(id, ref parameters);
-
             if (!string.IsNullOrEmpty(sql))
             {
                 List<T> dataList = DataConvertList<T>(sql, parameters);
-                if(dataList != null && dataList.Count > 0)
+                if (dataList != null && dataList.Count > 0)
                 {
                     return dataList[0];
                 }
@@ -374,190 +403,111 @@ namespace sw.orm
         }
 
         /// <summary>
+        /// 根据ID获取单条数据(实体对应数据表中必须存在ID字段)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="id"></param>
+        /// <returns></returns>
+        public override T GetModel<T>(int id)
+        {
+            List<SWDbParameter> parameters = new List<SWDbParameter>();
+            string sql = SearchSqlBuilder.GetModel<T>(id, ref parameters);
+            if (!string.IsNullOrEmpty(sql))
+            {
+                List<T> dataList = DataConvertList<T>(sql, parameters);
+                if (dataList != null && dataList.Count > 0)
+                {
+                    return dataList[0];
+                }
+            }
+            return default(T);
+        }
+
+        #endregion
+
+        #region 查询所有记录
+
+        /// <summary>
         /// 获取所有记录
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <returns></returns>
-        public override List<T> GetAll<T>(Expression<Func<T, object>> orderBy, AscOrDesc ascOrDesc = AscOrDesc.Asc)
-        {
-            return GetModelList<T, bool>(null, orderBy, ascOrDesc, null);
-        }
-
-        public override List<T> GetAll<T>(string orderFieldName, AscOrDesc ascOrDesc = AscOrDesc.Asc)
-        {
-            return GetModelList<T, bool>(null, orderFieldName, ascOrDesc, null);
-        }
-
         public override List<T> GetAll<T>()
         {
-            return GetModelList<T, bool>(null, "", null, null, null);
-        }
-
-        public override int GetCount<T>()
-        {
-            return GetCount<T, T>(null);
+            return GetModelList<T, bool>(null);
         }
 
         /// <summary>
-        /// 查询数据记录(条件为空获取所有)
+        /// 获取排序后所有记录，单个排序(排序字段为字符串)
         /// </summary>
         /// <typeparam name="T"></typeparam>
-        /// <param name="expression"></param>
+        /// <param name="orderFieldName"></param>
+        /// <param name="ascOrDesc"></param>
         /// <returns></returns>
-        public override int GetCount<T>(Expression<Func<T, bool>> expression)
+        public override List<T> GetAll<T>(string orderFieldName, AscOrDesc ascOrDesc = AscOrDesc.Asc)
         {
-            return GetCount<T, bool>(expression);
-        }
-
-        /// <summary>
-        /// 查询数据记录(条件为空获取所有)
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="expression"></param>
-        /// <returns></returns>
-        public override int GetCount<T>(Expression<Func<T, T>> expression)
-        {
-            return GetCount<T, T>(expression);
-        }
-
-        /// <summary>
-        /// 查询数据记录(条件为空获取所有)
-        /// </summary>
-        /// <typeparam name="T1"></typeparam>
-        /// <typeparam name="T2"></typeparam>
-        /// <param name="expression"></param>
-        /// <returns></returns>
-        private int GetCount<T1, T2>(Expression<Func<T1, T2>> expression)
-        {
-            List<SWDbParameter> parameters = new List<SWDbParameter>();
-            string sql = SearchSqlBuilder.GetCount<T1, T2>(expression, ref parameters);
-            if (string.IsNullOrEmpty(sql))
+            //查询参数
+            SearchParameter<T, bool> searchParameter = new SearchParameter<T, bool>
             {
-                return SWErrorCode.ParamsEmpty;
-            }
-            //执行sql语句
-            DataTable dataTable = sqlHelper.ExecuteDataTable(sql, parameters);
-            if (dataTable != null && dataTable.Rows.Count > 0)
+                OrderStr = orderFieldName,
+                AscOrDesc = ascOrDesc
+            };
+            return GetModelList<T, bool>(searchParameter);
+        }
+
+        /// <summary>
+        /// 获取排序后所有记录，多个排序(排序字段为字符串)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="orderList"></param>
+        /// <returns></returns>
+        public override List<T> GetAll<T>(List<SWOrder> orderList)
+        {
+            //查询参数
+            SearchParameter<T, bool> searchParameter = new SearchParameter<T, bool>
             {
-                if (!string.IsNullOrEmpty(dataTable.Rows[0][0].ToString()))
-                {
-                    return Convert.ToInt32(dataTable.Rows[0][0].ToString());
-                }
-            }
-            return SWErrorCode.ExecFailed;
-        }
-
-        public override List<T> GetModelList<T>()
-        {
-            return GetModelList<T, bool>(null, "", null, null, null);
-        }
-
-        public override List<T> GetModelList<T>(Expression<Func<T, bool>> expression)
-        {
-            return GetModelList<T, bool>(expression, "", null, null, null);
+                OrderStrList = orderList
+            };
+            return GetModelList<T, bool>(searchParameter);
         }
 
         /// <summary>
-        /// 根据条件获取实体对象列表
+        /// 获取排序后所有记录，单个排序(排序字段为lambda表达式)
         /// </summary>
         /// <typeparam name="T"></typeparam>
-        /// <param name="expression"></param>
-        /// <returns></returns>
-        public override List<T> GetModelList<T>(Expression<Func<T, bool>> expression, Expression<Func<T, object>> orderBy = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null)
-        {
-            return GetModelList<T, bool>(expression, orderBy, ascOrDesc, pageSize, pageIndex);
-        }
-
-        public override List<T> GetModelList<T>(Expression<Func<T, bool>> expression, string orderFieldName = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null)
-        {
-            return GetModelList<T, bool>(expression, orderFieldName, ascOrDesc, pageSize, pageIndex);
-        }
-
-        /// <summary>
-        /// 根据条件获取实体对象列表
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="id"></param>
-        /// <returns></returns>
-        public override List<T> GetModelList<T>(Expression<Func<T, T>> expression, Expression<Func<T, object>> orderBy = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null)
-        {
-            return GetModelList<T, T>(expression, orderBy, ascOrDesc, pageSize, pageIndex);
-        }
-
-        public override List<T> GetModelList<T>(Expression<Func<T, T>> expression, string orderFieldName = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null)
-        {
-            return GetModelList<T, T>(expression, orderFieldName, ascOrDesc, pageSize, pageIndex);
-        }
-
-        /// <summary>
-        /// 根据条件获取实体对象列表
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="expression"></param>
-        /// <returns></returns>
-        public override List<T> GetModelListWithCount<T>(Expression<Func<T, bool>> expression, out int count, Expression<Func<T, object>> orderBy = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null)
-        {
-            return GetModelListWithCount<T, bool>(expression, out count, orderBy, ascOrDesc, pageSize, pageIndex);
-        }
-
-        public override List<T> GetModelListWithCount<T>(Expression<Func<T, bool>> expression, out int count, string orderFieldName = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null)
-        {
-            return GetModelListWithCount<T, bool>(expression, out count, orderFieldName, ascOrDesc, pageSize, pageIndex);
-        }
-
-        /// <summary>
-        /// 根据条件获取实体对象列表
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="id"></param>
-        /// <returns></returns>
-        public override List<T> GetModelListWithCount<T>(Expression<Func<T, T>> expression, out int count, Expression<Func<T, object>> orderBy = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null)
-        {
-            return GetModelListWithCount<T, T>(expression, out count, orderBy, ascOrDesc, pageSize, pageIndex);
-        }
-
-        public override List<T> GetModelListWithCount<T>(Expression<Func<T, T>> expression, out int count, string orderFieldName = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null)
-        {
-            return GetModelListWithCount<T, T>(expression, out count, orderFieldName, ascOrDesc, pageSize, pageIndex);
-        }
-
-        /// <summary>
-        /// 获取前n条数据
-        /// </summary>
-        /// <typeparam name="T"></typeparam>
-        /// <param name="expression"></param>
         /// <param name="orderBy"></param>
         /// <param name="ascOrDesc"></param>
-        /// <param name="top"></param>
         /// <returns></returns>
-        public override List<T> GetTopModelList<T>(Expression<Func<T, bool>> expression, Expression<Func<T, object>> orderBy = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? top = null)
+        public override List<T> GetAll<T>(Expression<Func<T, object>> orderBy, AscOrDesc ascOrDesc = AscOrDesc.Asc)
         {
-            return GetModelList<T, bool>(expression, orderBy, ascOrDesc, top);
-        }
-
-        public override List<T> GetTopModelList<T>(Expression<Func<T, bool>> expression, string orderFieldName = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? top = null)
-        {
-            return GetModelList<T, bool>(expression, orderFieldName, ascOrDesc, top);
+            //查询参数
+            SearchParameter<T, bool> searchParameter = new SearchParameter<T, bool>
+            {
+                OrderByExp = orderBy,
+                AscOrDesc = ascOrDesc
+            };
+            return GetModelList<T, bool>(searchParameter);
         }
 
         /// <summary>
-        /// 获取前n条数据
+        /// 获取排序后所有记录，多个排序(排序字段为lambda表达式)
         /// </summary>
         /// <typeparam name="T"></typeparam>
-        /// <param name="expression"></param>
-        /// <param name="orderBy"></param>
-        /// <param name="ascOrDesc"></param>
-        /// <param name="top"></param>
+        /// <param name="orderList"></param>
         /// <returns></returns>
-        public override List<T> GetTopModelList<T>(Expression<Func<T, T>> expression, Expression<Func<T, object>> orderBy = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? top = null)
+        public override List<T> GetAll<T>(List<SWOrder<T>> orderList)
         {
-            return GetModelList<T, T>(expression, orderBy, ascOrDesc, top);
+            //查询参数
+            SearchParameter<T, bool> searchParameter = new SearchParameter<T, bool>
+            {
+                OrderByExpList = orderList
+            };
+            return GetModelList<T, bool>(searchParameter);
         }
 
-        public override List<T> GetTopModelList<T>(Expression<Func<T, T>> expression, string orderFieldName = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? top = null)
-        {
-            return GetModelList<T, T>(expression, orderFieldName, ascOrDesc, top);
-        }
+        #endregion
+
+        #region 判断数据是否存在
 
         /// <summary>
         /// 查询数据是否存在
@@ -618,276 +568,516 @@ namespace sw.orm
             return result;
         }
 
+        #endregion
+
+        #region 查询记录总数
+
         /// <summary>
-        /// 含分页
+        /// 获取所有记录总数
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <returns></returns>
+        public override int GetCount<T>()
+        {
+            return GetCount<T, T>(null);
+        }
+
+        /// <summary>
+        /// 根据条件获取所有记录总数
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        /// <returns></returns>
+        public override int GetCount<T>(Expression<Func<T, bool>> expression)
+        {
+            return GetCount<T, bool>(expression);
+        }
+
+        /// <summary>
+        /// 根据条件获取所有记录总数
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        /// <returns></returns>
+        public override int GetCount<T>(Expression<Func<T, T>> expression)
+        {
+            return GetCount<T, T>(expression);
+        }
+
+        /// <summary>
+        /// 根据Where条件获取所有记录总数
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="where"></param>
+        /// <returns></returns>
+        public override int GetCount<T>(Where<T> where)
+        {
+            Expression<Func<T, bool>> expression = null;
+            if (where != null && where.GetExpression() != null)
+            {
+                expression = where.GetExpression();
+            }
+            return GetCount<T>(expression);
+        }
+
+        /// <summary>
+        /// 获取记录总数
         /// </summary>
         /// <typeparam name="T1"></typeparam>
         /// <typeparam name="T2"></typeparam>
         /// <param name="expression"></param>
-        /// <param name="orderBy"></param>
-        /// <param name="ascOrDesc"></param>
-        /// <param name="pageSize"></param>
-        /// <param name="pageIndex"></param>
         /// <returns></returns>
-        private List<T1> GetModelList<T1, T2>(Expression<Func<T1, T2>> expression, Expression<Func<T1, object>> orderBy = null, AscOrDesc? ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null) where T1 : new()
+        private int GetCount<T1, T2>(Expression<Func<T1, T2>> expression)
         {
             List<SWDbParameter> parameters = new List<SWDbParameter>();
-            string sql = string.Empty;
-            //通用查询参数
-            SearchParameter<T1, T2> searchParameter = new SearchParameter<T1, T2>
+            string sql = SearchSqlBuilder.GetCount<T1, T2>(expression, ref parameters);
+            if (string.IsNullOrEmpty(sql))
+            {
+                return SWErrorCode.ParamsEmpty;
+            }
+            //执行sql语句
+            DataTable dataTable = sqlHelper.ExecuteDataTable(sql, parameters);
+            if (dataTable != null && dataTable.Rows.Count > 0)
+            {
+                if (!string.IsNullOrEmpty(dataTable.Rows[0][0].ToString()))
+                {
+                    return Convert.ToInt32(dataTable.Rows[0][0].ToString());
+                }
+            }
+            return SWErrorCode.ExecFailed;
+        }
+
+        #endregion
+
+        #region 获取数据记录
+
+        /// <summary>
+        /// 获取数据记录集合
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <returns></returns>
+        public override List<T> GetModelList<T>()
+        {
+            return GetModelList<T, bool>(null);
+        }
+
+        /// <summary>
+        /// 根据筛选条件获取数据记录集合
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        /// <returns></returns>
+        public override List<T> GetModelList<T>(Expression<Func<T, bool>> expression)
+        {
+            SearchParameter<T, bool> searchParameter = new SearchParameter<T, bool>
+            {
+                FilterExp = expression
+            };
+            return GetModelList<T, bool>(searchParameter);
+        }
+
+        /// <summary>
+        /// 根据筛选条件获取数据记录集合：含分页排序(单个排序字段：lambda表达式)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        /// <returns></returns>
+        public override List<T> GetModelList<T>(Expression<Func<T, bool>> expression, Expression<Func<T, object>> orderBy = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null)
+        {
+            SearchParameter<T, bool> searchParameter = new SearchParameter<T, bool>
             {
                 FilterExp = expression,
                 OrderByExp = orderBy,
                 AscOrDesc = ascOrDesc,
                 PageSize = pageSize,
-                PageIndex = pageIndex
+                PageIndex = pageIndex,
             };
-            if (SWClient.CurDBType == DBType.SQLServer)
-            {
-                sql = SearchSqlBuilder.GetModelList<T1, T2>(ref parameters, searchParameter);
-            }
-            else if (SWClient.CurDBType == DBType.MySql)
-            {
-                sql = MySqlSearchSqlBuilder.GetModelList<T1, T2>(ref parameters, searchParameter);
-            }
-            else if (SWClient.CurDBType == DBType.SQLite)
-            {
-                sql = SQLiteSearchSqlBuilder.GetModelList<T1, T2>(ref parameters, searchParameter);
-            }
-            else
-            {
-                throw new Exception(message: "not support modellist by page.");
-            }
-
-            if (string.IsNullOrEmpty(sql))
-            {
-                return null;
-            }
-
-            return DataConvertList<T1>(sql, parameters);
+            return GetModelList<T, bool>(searchParameter);
         }
 
-        private List<T1> GetModelList<T1, T2>(Expression<Func<T1, T2>> expression, string orderFieldName = null, AscOrDesc? ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null) where T1 : new()
+        /// <summary>
+        /// 根据筛选条件获取数据记录集合：含分页排序(多个排序字段：lambda表达式)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        /// <param name="orderByList"></param>
+        /// <param name="pageSize"></param>
+        /// <param name="pageIndex"></param>
+        /// <returns></returns>
+        public override List<T> GetModelList<T>(Expression<Func<T, bool>> expression, List<SWOrder<T>> orderByList = null, int? pageSize = null, int? pageIndex = null)
         {
-            List<SWDbParameter> parameters = new List<SWDbParameter>();
+            SearchParameter<T, bool> searchParameter = new SearchParameter<T, bool>
+            {
+                FilterExp = expression,
+                OrderByExpList = orderByList,
+                PageSize = pageSize,
+                PageIndex = pageIndex,
+            };
+            return GetModelList<T, bool>(searchParameter);
+        }
 
-            string sql = string.Empty;
-            //通用查询参数
-            SearchParameter<T1, T2> searchParameter = new SearchParameter<T1, T2>
+        /// <summary>
+        /// 根据筛选条件获取数据记录集合：含分页排序(单个排序字段：字符串)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        /// <param name="orderFieldName"></param>
+        /// <param name="ascOrDesc"></param>
+        /// <param name="pageSize"></param>
+        /// <param name="pageIndex"></param>
+        /// <returns></returns>
+        public override List<T> GetModelList<T>(Expression<Func<T, bool>> expression, string orderFieldName = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null)
+        {
+            SearchParameter<T, bool> searchParameter = new SearchParameter<T, bool>
             {
                 FilterExp = expression,
                 OrderStr = orderFieldName,
                 AscOrDesc = ascOrDesc,
                 PageSize = pageSize,
-                PageIndex = pageIndex
+                PageIndex = pageIndex,
             };
-            if (SWClient.CurDBType == DBType.SQLServer)
-            {
-                sql = SearchSqlBuilder.GetModelList<T1, T2>(ref parameters, searchParameter);
-            }
-            else if (SWClient.CurDBType == DBType.MySql)
-            {
-                sql = MySqlSearchSqlBuilder.GetModelList<T1, T2>(ref parameters, searchParameter);
-            }
-            else if (SWClient.CurDBType == DBType.SQLite)
-            {
-                sql = SQLiteSearchSqlBuilder.GetModelList<T1, T2>(ref parameters, searchParameter);
-            }
-            else
-            {
-                throw new Exception(message: "not support modellist by page.");
-            }
-
-            if (string.IsNullOrEmpty(sql))
-            {
-                return null;
-            }
-            return DataConvertList<T1>(sql, parameters);
+            return GetModelList<T, bool>(searchParameter);
         }
-        
-        /// <summary>
-        /// 含top查询
-        /// </summary>
-        /// <typeparam name="T1"></typeparam>
-        /// <typeparam name="T2"></typeparam>
-        /// <param name="expression"></param>
-        /// <param name="orderBy"></param>
-        /// <param name="ascOrDesc"></param>
-        /// <param name="top"></param>
-        /// <returns></returns>
-        private List<T1> GetModelList<T1, T2>(Expression<Func<T1, T2>> expression, Expression<Func<T1, object>> orderBy = null, AscOrDesc? ascOrDesc = AscOrDesc.Asc, int? top = null) where T1 : new()
-        {
-            List<SWDbParameter> parameters = new List<SWDbParameter>();
 
-            string sql = string.Empty;
-            //通用查询参数
-            SearchParameter<T1, T2> searchParameter = new SearchParameter<T1, T2>
+        /// <summary>
+        /// 根据筛选条件获取数据记录集合：含分页排序(多个排序字段：字符串)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        /// <param name="orderFieldNameList"></param>
+        /// <param name="pageSize"></param>
+        /// <param name="pageIndex"></param>
+        /// <returns></returns>
+        public override List<T> GetModelList<T>(Expression<Func<T, bool>> expression, List<SWOrder> orderFieldNameList = null, int? pageSize = null, int? pageIndex = null)
+        {
+            SearchParameter<T, bool> searchParameter = new SearchParameter<T, bool>
+            {
+                FilterExp = expression,
+                OrderStrList = orderFieldNameList,
+                PageSize = pageSize,
+                PageIndex = pageIndex,
+            };
+            return GetModelList<T, bool>(searchParameter);
+        }
+
+        /// <summary>
+        /// 根据筛选条件获取数据记录集合：含分页排序(单个排序字段：lambda表达式)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="id"></param>
+        /// <returns></returns>
+        public override List<T> GetModelList<T>(Expression<Func<T, T>> expression, Expression<Func<T, object>> orderBy = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null)
+        {
+            SearchParameter<T, T> searchParameter = new SearchParameter<T, T>
             {
                 FilterExp = expression,
                 OrderByExp = orderBy,
                 AscOrDesc = ascOrDesc,
-                Top = top
+                PageSize = pageSize,
+                PageIndex = pageIndex,
             };
-            if (SWClient.CurDBType == DBType.SQLServer)
-            {
-                sql = SearchSqlBuilder.GetModelList<T1, T2>(ref parameters, searchParameter);
-            }
-            else if (SWClient.CurDBType == DBType.MySql)
-            {
-                sql = MySqlSearchSqlBuilder.GetModelList<T1, T2>(ref parameters, searchParameter);
-            }
-            else if (SWClient.CurDBType == DBType.SQLite)
-            {
-                sql = SQLiteSearchSqlBuilder.GetModelList<T1, T2>(ref parameters, searchParameter);
-            }
-            else
-            {
-                throw new Exception(message: "not support modellist by top.");
-            }
-
-            if (string.IsNullOrEmpty(sql))
-            {
-                return null;
-            }
-
-            return DataConvertList<T1>(sql, parameters);
+            return GetModelList<T, T>(searchParameter);
         }
 
-        private List<T1> GetModelList<T1, T2>(Expression<Func<T1, T2>> expression, string orderFieldName = null, AscOrDesc? ascOrDesc = AscOrDesc.Asc, int? top = null) where T1 : new()
+        /// <summary>
+        /// 根据筛选条件获取数据记录集合：含分页排序(多个排序字段：lambda表达式)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        /// <param name="orderByList"></param>
+        /// <param name="pageSize"></param>
+        /// <param name="pageIndex"></param>
+        /// <returns></returns>
+        public override List<T> GetModelList<T>(Expression<Func<T, T>> expression, List<SWOrder<T>> orderByList = null, int? pageSize = null, int? pageIndex = null)
         {
-            List<SWDbParameter> parameters = new List<SWDbParameter>();
-
-            string sql = string.Empty;
-            //通用查询参数
-            SearchParameter<T1, T2> searchParameter = new SearchParameter<T1, T2>
+            SearchParameter<T, T> searchParameter = new SearchParameter<T, T>
             {
                 FilterExp = expression,
-                OrderStr = orderFieldName,
-                AscOrDesc = ascOrDesc,
-                Top = top
+                OrderByExpList = orderByList,
+                PageSize = pageSize,
+                PageIndex = pageIndex,
             };
-            if (SWClient.CurDBType == DBType.SQLServer)
-            {
-                sql = SearchSqlBuilder.GetModelList<T1, T2>(ref parameters, searchParameter);
-            }
-            else if (SWClient.CurDBType == DBType.MySql)
-            {
-                sql = MySqlSearchSqlBuilder.GetModelList<T1, T2>(ref parameters, searchParameter);
-            }
-            else if (SWClient.CurDBType == DBType.SQLite)
-            {
-                sql = SQLiteSearchSqlBuilder.GetModelList<T1, T2>(ref parameters, searchParameter);
-            }
-            else
-            {
-                throw new Exception(message: "not support modellist by top.");
-            }
-
-            if (string.IsNullOrEmpty(sql))
-            {
-                return null;
-            }
-
-            return DataConvertList<T1>(sql, parameters);
+            return GetModelList<T, T>(searchParameter);
         }
-        
+
         /// <summary>
-        /// 分页查询数据并返回总数
+        /// 根据筛选条件获取数据记录集合：含分页排序(单个排序字段：字符串)
         /// </summary>
-        /// <typeparam name="T1"></typeparam>
-        /// <typeparam name="T2"></typeparam>
+        /// <typeparam name="T"></typeparam>
         /// <param name="expression"></param>
-        /// <param name="count"></param>
-        /// <param name="orderBy"></param>
+        /// <param name="orderFieldName"></param>
         /// <param name="ascOrDesc"></param>
         /// <param name="pageSize"></param>
         /// <param name="pageIndex"></param>
         /// <returns></returns>
-        private List<T1> GetModelListWithCount<T1, T2>(Expression<Func<T1, T2>> expression, out int count, Expression<Func<T1, object>> orderBy = null, AscOrDesc? ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null) where T1 : new()
+        public override List<T> GetModelList<T>(Expression<Func<T, T>> expression, string orderFieldName = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null)
         {
-            count = -1;
-            List<SWDbParameter> parameters = new List<SWDbParameter>();
-
-            string sql = string.Empty;
-            if (SWClient.CurDBType == DBType.SQLServer || SWClient.CurDBType == DBType.MySql)
+            SearchParameter<T, T> searchParameter = new SearchParameter<T, T>
             {
-                SearchParameter<T1, T2> searchParameter = new SearchParameter<T1, T2>
-                {
-                    FilterExp = expression,
-                    OrderByExp = orderBy,
-                    AscOrDesc = ascOrDesc,
-                    PageSize = pageSize,
-                    PageIndex = pageIndex
-                };
-                if (SWClient.CurDBType == DBType.SQLServer)
-                {
-                    sql = SearchSqlBuilder.GetModelListWithCount<T1, T2>(ref parameters, searchParameter);
-                }
-                else 
-                {
-                    sql = MySqlSearchSqlBuilder.GetModelListWithCount<T1, T2>(ref parameters, searchParameter);
-                }
-
-                if (string.IsNullOrEmpty(sql))
-                {
-                    return null;
-                }
-                //执行sql语句
-                return DataConvertListWithCount<T1>(sql, parameters, out count);
-            }
-            else if (SWClient.CurDBType == DBType.SQLite)
-            {
-                count = GetCount<T1, T2>(expression);
-                return GetModelList<T1, T2>(expression, orderBy, ascOrDesc, pageSize, pageIndex);
-            }
-            else
-            {
-                throw new Exception(message: "not support modellist by page with count.");
-            }
+                FilterExp = expression,
+                OrderStr = orderFieldName,
+                AscOrDesc = ascOrDesc,
+                PageSize = pageSize,
+                PageIndex = pageIndex,
+            };
+            return GetModelList<T, T>(searchParameter);
         }
 
-        private List<T1> GetModelListWithCount<T1, T2>(Expression<Func<T1, T2>> expression, out int count, string orderFieldName = null, AscOrDesc? ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null) where T1 : new()
+        /// <summary>
+        /// 根据筛选条件获取数据记录集合：含分页排序(多个排序字段：字符串)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        /// <param name="orderFieldNameList"></param>
+        /// <param name="pageSize"></param>
+        /// <param name="pageIndex"></param>
+        /// <returns></returns>
+        public override List<T> GetModelList<T>(Expression<Func<T, T>> expression, List<SWOrder> orderFieldNameList = null, int? pageSize = null, int? pageIndex = null)
         {
-            count = -1;
-            List<SWDbParameter> parameters = new List<SWDbParameter>();
-            string sql = string.Empty;
-            if (SWClient.CurDBType == DBType.SQLServer || SWClient.CurDBType == DBType.MySql)
+            SearchParameter<T, T> searchParameter = new SearchParameter<T, T>
             {
-                SearchParameter<T1, T2> searchParameter = new SearchParameter<T1, T2>
+                FilterExp = expression,
+                OrderStrList = orderFieldNameList,
+                PageSize = pageSize,
+                PageIndex = pageIndex,
+            };
+            return GetModelList<T, T>(searchParameter);
+        }
+
+        /// <summary>
+        /// 根据筛选条件获取数据记录集合：含分页排序(SWPaging)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        /// <param name="paging"></param>
+        /// <returns></returns>
+        public override List<T> GetModelList<T>(Expression<Func<T, bool>> expression, SWPaging paging)
+        {
+            int? pageSize = null;
+            int? pageIndex = null;
+            List<SWOrder> orderList = new List<SWOrder>();
+            if (paging != null)
+            {
+                if (!string.IsNullOrEmpty(paging.Sort))
                 {
-                    FilterExp = expression,
-                    OrderStr = orderFieldName,
-                    AscOrDesc = ascOrDesc,
-                    PageSize = pageSize,
-                    PageIndex = pageIndex
-                };
-                if (SWClient.CurDBType == DBType.SQLServer)
-                {
-                    sql = SearchSqlBuilder.GetModelListWithCount<T1, T2>(ref parameters, searchParameter);
+                    //排序名称按分号分割
+                    string[] arrOrderName = paging.Sort.Split(Const.COMMA);
+                    string[] arrOrderSort = null;
+                    if (!string.IsNullOrEmpty(paging.Order))
+                    {
+                        arrOrderSort = paging.Order.Split(Const.COMMA);
+                    }
+
+                    for(int i = 0, count = arrOrderName.Length; i < count; i++)
+                    {
+                        SWOrder swOrder = new SWOrder();
+                        swOrder.OrderName = arrOrderName[i];
+                        if(arrOrderSort != null && arrOrderSort.Length > i && !string.IsNullOrEmpty(arrOrderSort[i]))
+                        {
+                            swOrder.AscOrDesc = Const.ASC.ToLower().Equals(arrOrderSort[i].ToLower()) ? AscOrDesc.Asc : AscOrDesc.Desc;
+                        }
+                        orderList.Add(swOrder);
+                    }
                 }
                 else
                 {
-                    sql = MySqlSearchSqlBuilder.GetModelListWithCount<T1, T2>(ref parameters, searchParameter);
+                    //TODO Log
+                    orderList.Add(new SWOrder() { OrderName = Const.DEFAULT_FIELD });
                 }
+                pageSize = paging.PageSize;
+                pageIndex = paging.PageIndex;
+            }
+            return GetModelList<T>(expression, orderList, pageSize, pageIndex);
+        }
 
-                if (string.IsNullOrEmpty(sql))
+        /// <summary>
+        /// 根据筛选条件Where获取数据记录集合
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="where"></param>
+        /// <returns></returns>
+        public override List<T> GetModelList<T>(Where<T> where)
+        {
+            if (where == null || where.GetExpression() == null)
+            {
+                return GetModelList<T>();
+            }
+            return GetModelList<T>(where.GetExpression());
+        }
+
+        /// <summary>
+        /// 根据筛选条件Where获取数据记录集合：含分页排序(单个排序字段：lambda表达式)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="where"></param>
+        /// <param name="orderBy"></param>
+        /// <param name="ascOrDesc"></param>
+        /// <param name="pageSize"></param>
+        /// <param name="pageIndex"></param>
+        /// <returns></returns>
+        public override List<T> GetModelList<T>(Where<T> where, Expression<Func<T, object>> orderBy = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null)
+        {
+            Expression<Func<T, bool>> expression = null;
+            if (where != null && where.GetExpression() != null)
+            {
+                expression = where.GetExpression();
+            }
+            return GetModelList<T>(expression, orderBy, ascOrDesc, pageSize, pageIndex);
+        }
+
+        /// <summary>
+        /// 根据筛选条件Where获取数据记录集合：含分页排序(多个排序字段：lambda表达式)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="where"></param>
+        /// <param name="orderByList"></param>
+        /// <param name="pageSize"></param>
+        /// <param name="pageIndex"></param>
+        /// <returns></returns>
+        public override List<T> GetModelList<T>(Where<T> where, List<SWOrder<T>> orderByList = null, int? pageSize = null, int? pageIndex = null)
+        {
+            Expression<Func<T, bool>> expression = null;
+            if (where != null && where.GetExpression() != null)
+            {
+                expression = where.GetExpression();
+            }
+            return GetModelList<T>(expression, orderByList, pageSize, pageIndex);
+        }
+
+        /// <summary>
+        /// 根据筛选条件Where获取数据记录集合：含分页排序(单个排序字段：字符串)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="where"></param>
+        /// <param name="orderFieldName"></param>
+        /// <param name="ascOrDesc"></param>
+        /// <param name="pageSize"></param>
+        /// <param name="pageIndex"></param>
+        /// <returns></returns>
+        public override List<T> GetModelList<T>(Where<T> where, string orderFieldName = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null)
+        {
+            Expression<Func<T, bool>> expression = null;
+            if (where != null && where.GetExpression() != null)
+            {
+                expression = where.GetExpression();
+            }
+            return GetModelList<T>(expression, orderFieldName, ascOrDesc, pageSize, pageIndex);
+        }
+
+        /// <summary>
+        /// 根据筛选条件Where获取数据记录集合：含分页排序(多个排序字段：字符串)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="where"></param>
+        /// <param name="orderFieldNameList"></param>
+        /// <param name="pageSize"></param>
+        /// <param name="pageIndex"></param>
+        /// <returns></returns>
+        public override List<T> GetModelList<T>(Where<T> where, List<SWOrder> orderFieldNameList = null, int? pageSize = null, int? pageIndex = null)
+        {
+            Expression<Func<T, bool>> expression = null;
+            if (where != null && where.GetExpression() != null)
+            {
+                expression = where.GetExpression();
+            }
+            return GetModelList<T>(expression, orderFieldNameList, pageSize, pageIndex);
+        }
+
+        /// <summary>
+        /// 根据筛选条件Where获取数据记录集合：含分页排序(SWPaging)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="where"></param>
+        /// <param name="paging"></param>
+        /// <returns></returns>
+        public override List<T> GetModelList<T>(Where<T> where, SWPaging paging)
+        {
+            Expression<Func<T, bool>> expression = null;
+            if (where != null && where.GetExpression() != null)
+            {
+                expression = where.GetExpression();
+            }
+
+            List<SWOrder> orderList = new List<SWOrder>();
+            int? pageSize = null;
+            int? pageIndex = null;
+            if (paging != null)
+            {
+                if (!string.IsNullOrEmpty(paging.Sort))
                 {
-                    return null;
+                    //排序名称按分号分割
+                    string[] arrOrderName = paging.Sort.Split(Const.COMMA);
+                    string[] arrOrderSort = null;
+                    if (!string.IsNullOrEmpty(paging.Order))
+                    {
+                        arrOrderSort = paging.Order.Split(Const.COMMA);
+                    }
+
+                    for (int i = 0, count = arrOrderName.Length; i < count; i++)
+                    {
+                        SWOrder swOrder = new SWOrder();
+                        swOrder.OrderName = arrOrderName[i];
+                        if (arrOrderSort != null && arrOrderSort.Length > i && !string.IsNullOrEmpty(arrOrderSort[i]))
+                        {
+                            swOrder.AscOrDesc = Const.ASC.ToLower().Equals(arrOrderSort[i].ToLower()) ? AscOrDesc.Asc : AscOrDesc.Desc;
+                        }
+                        orderList.Add(swOrder);
+                    }
                 }
-                //执行sql语句
-                return DataConvertListWithCount<T1>(sql, parameters, out count);
+                else
+                {
+                    //TODO Log
+                    orderList.Add(new SWOrder() { OrderName = Const.DEFAULT_FIELD });
+                }
+                pageSize = paging.PageSize;
+                pageIndex = paging.PageIndex;
+            }
+            return GetModelList<T>(expression, orderList, pageSize, pageIndex);
+        }
+
+        /// <summary>
+        /// 获取数据列表集合
+        /// </summary>
+        /// <typeparam name="T1"></typeparam>
+        /// <typeparam name="T2"></typeparam>
+        /// <param name="searchParameter"></param>
+        /// <returns></returns>
+        private List<T1> GetModelList<T1, T2>(SearchParameter<T1, T2> searchParameter) where T1 : new()
+        {
+            List<SWDbParameter> parameters = new List<SWDbParameter>();
+            string sql = string.Empty;
+            if (SWClient.CurDBType == DBType.SQLServer)
+            {
+                sql = SearchSqlBuilder.GetModelList<T1, T2>(ref parameters, searchParameter);
+            }
+            else if (SWClient.CurDBType == DBType.MySql)
+            {
+                sql = MySqlSearchSqlBuilder.GetModelList<T1, T2>(ref parameters, searchParameter);
             }
             else if (SWClient.CurDBType == DBType.SQLite)
             {
-                count = GetCount<T1, T2>(expression);
-                return GetModelList<T1, T2>(expression, orderFieldName, ascOrDesc, pageSize, pageIndex);
+                sql = SQLiteSearchSqlBuilder.GetModelList<T1, T2>(ref parameters, searchParameter);
             }
             else
             {
-                throw new Exception(message: "not support modellist by page with count.");
+                throw new Exception(message: "not support modellist by page.");
             }
+
+            if (string.IsNullOrEmpty(sql))
+            {
+                return null;
+            }
+
+            return DataConvertList<T1>(sql, parameters);
         }
 
+        /// <summary>
+        /// 执行sql并返回集合列表
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="sql"></param>
+        /// <param name="parameters"></param>
+        /// <returns></returns>
         private List<T> DataConvertList<T>(string sql, List<SWDbParameter> parameters) where T : new()
         {
             //执行sql语句
@@ -906,10 +1096,408 @@ namespace sw.orm
             }
             else
             {
-                throw new Exception(message: "not support modellist by page.");
+                throw new Exception(message: "not support the type of db.");
             }
         }
 
+        #endregion
+
+        #region  获取数据列表并返回数据总条数(分页查询)
+
+        /// <summary>
+        /// 根据筛选条件获取数据记录集合：含分页排序(单个排序字段：lambda表达式)，并返回记录总数
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        /// <returns></returns>
+        public override List<T> GetModelListWithCount<T>(Expression<Func<T, bool>> expression, out int count, Expression<Func<T, object>> orderBy = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null)
+        {
+            SearchParameter<T, bool> searchParameter = new SearchParameter<T, bool>
+            {
+                FilterExp = expression,
+                OrderByExp = orderBy,
+                AscOrDesc = ascOrDesc,
+                PageSize = pageSize,
+                PageIndex = pageIndex
+            };
+            return GetModelListWithCount<T, bool>(searchParameter, out count);
+        }
+
+        /// <summary>
+        /// 根据筛选条件获取数据记录集合：含分页排序(多个排序字段：lambda表达式)，并返回记录总数
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        /// <param name="count"></param>
+        /// <param name="orderByList"></param>
+        /// <param name="pageSize"></param>
+        /// <param name="pageIndex"></param>
+        /// <returns></returns>
+        public override List<T> GetModelListWithCount<T>(Expression<Func<T, bool>> expression, out int count, List<SWOrder<T>> orderByList = null, int? pageSize = null, int? pageIndex = null)
+        {
+            SearchParameter<T, bool> searchParameter = new SearchParameter<T, bool>
+            {
+                FilterExp = expression,
+                OrderByExpList = orderByList,
+                PageSize = pageSize,
+                PageIndex = pageIndex
+            };
+            return GetModelListWithCount<T, bool>(searchParameter, out count);
+        }
+
+        /// <summary>
+        /// 根据筛选条件获取数据记录集合：含分页排序(单个排序字段：字符串)，并返回记录总数
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        /// <param name="count"></param>
+        /// <param name="orderFieldName"></param>
+        /// <param name="ascOrDesc"></param>
+        /// <param name="pageSize"></param>
+        /// <param name="pageIndex"></param>
+        /// <returns></returns>
+        public override List<T> GetModelListWithCount<T>(Expression<Func<T, bool>> expression, out int count, string orderFieldName = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null)
+        {
+            SearchParameter<T, bool> searchParameter = new SearchParameter<T, bool>
+            {
+                FilterExp = expression,
+                OrderStr = orderFieldName,
+                AscOrDesc = ascOrDesc,
+                PageSize = pageSize,
+                PageIndex = pageIndex
+            };
+            return GetModelListWithCount<T, bool>(searchParameter, out count);
+        }
+
+        /// <summary>
+        /// 根据筛选条件获取数据记录集合：含分页排序(多个排序字段：字符串)，并返回记录总数
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        /// <param name="count"></param>
+        /// <param name="orderFieldNameList"></param>
+        /// <param name="pageSize"></param>
+        /// <param name="pageIndex"></param>
+        /// <returns></returns>
+        public override List<T> GetModelListWithCount<T>(Expression<Func<T, bool>> expression, out int count, List<SWOrder> orderFieldNameList = null, int? pageSize = null, int? pageIndex = null)
+        {
+            SearchParameter<T, bool> searchParameter = new SearchParameter<T, bool>
+            {
+                FilterExp = expression,
+                OrderStrList = orderFieldNameList,
+                PageSize = pageSize,
+                PageIndex = pageIndex
+            };
+            return GetModelListWithCount<T, bool>(searchParameter, out count);
+        }
+
+        /// <summary>
+        /// 根据筛选条件获取数据记录集合：含分页排序(单个排序字段：lambda表达式)，并返回记录总数
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="id"></param>
+        /// <returns></returns>
+        public override List<T> GetModelListWithCount<T>(Expression<Func<T, T>> expression, out int count, Expression<Func<T, object>> orderBy = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null)
+        {
+            SearchParameter<T, T> searchParameter = new SearchParameter<T, T>
+            {
+                FilterExp = expression,
+                OrderByExp = orderBy,
+                AscOrDesc = ascOrDesc,
+                PageSize = pageSize,
+                PageIndex = pageIndex
+            };
+            return GetModelListWithCount<T, T>(searchParameter, out count);
+        }
+
+        /// <summary>
+        /// 根据筛选条件获取数据记录集合：含分页排序(多个排序字段：lambda表达式)，并返回记录总数
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        /// <param name="count"></param>
+        /// <param name="orderByList"></param>
+        /// <param name="pageSize"></param>
+        /// <param name="pageIndex"></param>
+        /// <returns></returns>
+        public override List<T> GetModelListWithCount<T>(Expression<Func<T, T>> expression, out int count, List<SWOrder<T>> orderByList = null, int? pageSize = null, int? pageIndex = null)
+        {
+            SearchParameter<T, T> searchParameter = new SearchParameter<T, T>
+            {
+                FilterExp = expression,
+                OrderByExpList = orderByList,
+                PageSize = pageSize,
+                PageIndex = pageIndex
+            };
+            return GetModelListWithCount<T, T>(searchParameter, out count);
+        }
+
+        /// <summary>
+        /// 根据筛选条件获取数据记录集合：含分页排序(单个排序字段：字符串)，并返回记录总数
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        /// <param name="count"></param>
+        /// <param name="orderFieldName"></param>
+        /// <param name="ascOrDesc"></param>
+        /// <param name="pageSize"></param>
+        /// <param name="pageIndex"></param>
+        /// <returns></returns>
+        public override List<T> GetModelListWithCount<T>(Expression<Func<T, T>> expression, out int count, string orderFieldName = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null)
+        {
+            SearchParameter<T, T> searchParameter = new SearchParameter<T, T>
+            {
+                FilterExp = expression,
+                OrderStr = orderFieldName,
+                AscOrDesc = ascOrDesc,
+                PageSize = pageSize,
+                PageIndex = pageIndex
+            };
+            return GetModelListWithCount<T, T>(searchParameter, out count);
+        }
+
+        /// <summary>
+        /// 根据筛选条件获取数据记录集合：含分页排序(多个排序字段：字符串)，并返回记录总数
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        /// <param name="count"></param>
+        /// <param name="orderFieldNameList"></param>
+        /// <param name="pageSize"></param>
+        /// <param name="pageIndex"></param>
+        /// <returns></returns>
+        public override List<T> GetModelListWithCount<T>(Expression<Func<T, T>> expression, out int count, List<SWOrder> orderFieldNameList = null, int? pageSize = null, int? pageIndex = null)
+        {
+            SearchParameter<T, T> searchParameter = new SearchParameter<T, T>
+            {
+                FilterExp = expression,
+                OrderStrList = orderFieldNameList,
+                PageSize = pageSize,
+                PageIndex = pageIndex
+            };
+            return GetModelListWithCount<T, T>(searchParameter, out count);
+        }
+
+        /// <summary>
+        /// 根据筛选条件获取数据记录集合：含分页排序(SWPaging)，并返回记录总数
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        /// <param name="count"></param>
+        /// <param name="paging"></param>
+        /// <returns></returns>
+        public override List<T> GetModelListWithCount<T>(Expression<Func<T, bool>> expression, out int count, SWPaging paging)
+        {
+            List<SWOrder> orderList = new List<SWOrder>();
+            int? pageSize = null;
+            int? pageIndex = null;
+            if (paging != null)
+            {
+                if (!string.IsNullOrEmpty(paging.Sort))
+                {
+                    //排序名称按分号分割
+                    string[] arrOrderName = paging.Sort.Split(Const.COMMA);
+                    string[] arrOrderSort = null;
+                    if (!string.IsNullOrEmpty(paging.Order))
+                    {
+                        arrOrderSort = paging.Order.Split(Const.COMMA);
+                    }
+
+                    for (int i = 0, icount = arrOrderName.Length; i < icount; i++)
+                    {
+                        SWOrder swOrder = new SWOrder();
+                        swOrder.OrderName = arrOrderName[i];
+                        if (arrOrderSort != null && arrOrderSort.Length > i && !string.IsNullOrEmpty(arrOrderSort[i]))
+                        {
+                            swOrder.AscOrDesc = Const.ASC.ToLower().Equals(arrOrderSort[i].ToLower()) ? AscOrDesc.Asc : AscOrDesc.Desc;
+                        }
+                        orderList.Add(swOrder);
+                    }
+                }
+                else
+                {
+                    //TODO Log
+                    orderList.Add(new SWOrder() { OrderName = Const.DEFAULT_FIELD });
+                }
+                pageSize = paging.PageSize;
+                pageIndex = paging.PageIndex;
+            }
+            return GetModelListWithCount<T>(expression, out count, orderList, pageSize, pageIndex);
+        }
+
+        /// <summary>
+        /// 根据Where筛选条件获取数据记录集合：含分页排序(单个排序字段：lambda表达式)，并返回记录总数
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="where"></param>
+        /// <param name="count"></param>
+        /// <param name="orderBy"></param>
+        /// <param name="ascOrDesc"></param>
+        /// <param name="pageSize"></param>
+        /// <param name="pageIndex"></param>
+        /// <returns></returns>
+        public override List<T> GetModelListWithCount<T>(Where<T> where, out int count, Expression<Func<T, object>> orderBy = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null)
+        {
+            Expression<Func<T, bool>> expression = null;
+            if (where != null && where.GetExpression() != null)
+            {
+                expression = where.GetExpression();
+            }
+            return GetModelListWithCount<T>(expression, out count, orderBy, ascOrDesc, pageSize, pageIndex);
+        }
+
+        /// <summary>
+        /// 根据Where筛选条件获取数据记录集合：含分页排序(多个排序字段：lambda表达式)，并返回记录总数
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="where"></param>
+        /// <param name="count"></param>
+        /// <param name="orderByList"></param>
+        /// <param name="pageSize"></param>
+        /// <param name="pageIndex"></param>
+        /// <returns></returns>
+        public override List<T> GetModelListWithCount<T>(Where<T> where, out int count, List<SWOrder<T>> orderByList = null, int? pageSize = null, int? pageIndex = null)
+        {
+            Expression<Func<T, bool>> expression = null;
+            if (where != null && where.GetExpression() != null)
+            {
+                expression = where.GetExpression();
+            }
+            return GetModelListWithCount<T>(expression, out count, orderByList, pageSize, pageIndex);
+        }
+
+        /// <summary>
+        /// 根据Where筛选条件获取数据记录集合：含分页排序(单个排序字段：字符串)，并返回记录总数
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="where"></param>
+        /// <param name="count"></param>
+        /// <param name="orderFieldName"></param>
+        /// <param name="ascOrDesc"></param>
+        /// <param name="pageSize"></param>
+        /// <param name="pageIndex"></param>
+        /// <returns></returns>
+        public override List<T> GetModelListWithCount<T>(Where<T> where, out int count, string orderFieldName = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null)
+        {
+            Expression<Func<T, bool>> expression = null;
+            if (where != null && where.GetExpression() != null)
+            {
+                expression = where.GetExpression();
+            }
+            return GetModelListWithCount<T>(expression, out count, orderFieldName, ascOrDesc, pageSize, pageIndex);
+        }
+
+        /// <summary>
+        /// 根据Where筛选条件获取数据记录集合：含分页排序(多个排序字段：字符串)，并返回记录总数
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="where"></param>
+        /// <param name="count"></param>
+        /// <param name="orderFieldNameList"></param>
+        /// <param name="pageSize"></param>
+        /// <param name="pageIndex"></param>
+        /// <returns></returns>
+        public override List<T> GetModelListWithCount<T>(Where<T> where, out int count, List<SWOrder> orderFieldNameList = null, int? pageSize = null, int? pageIndex = null)
+        {
+            Expression<Func<T, bool>> expression = null;
+            if (where != null && where.GetExpression() != null)
+            {
+                expression = where.GetExpression();
+            }
+            return GetModelListWithCount<T>(expression, out count, orderFieldNameList, pageSize, pageIndex);
+        }
+
+        /// <summary>
+        /// 根据Where筛选条件获取数据记录集合：含分页排序(SWPaging)，并返回记录总数
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="where"></param>
+        /// <param name="count"></param>
+        /// <param name="paging"></param>
+        /// <returns></returns>
+        public override List<T> GetModelListWithCount<T>(Where<T> where, out int count, SWPaging paging)
+        {
+            Expression<Func<T, bool>> expression = null;
+            if (where != null && where.GetExpression() != null)
+            {
+                expression = where.GetExpression();
+            }
+
+            List<SWOrder> orderList = new List<SWOrder>();
+            int? pageSize = null;
+            int? pageIndex = null;
+            if (paging != null)
+            {
+                if (!string.IsNullOrEmpty(paging.Sort))
+                {
+                    //排序名称按分号分割
+                    string[] arrOrderName = paging.Sort.Split(Const.COMMA);
+                    string[] arrOrderSort = null;
+                    if (!string.IsNullOrEmpty(paging.Order))
+                    {
+                        arrOrderSort = paging.Order.Split(Const.COMMA);
+                    }
+
+                    for (int i = 0, icount = arrOrderName.Length; i < icount; i++)
+                    {
+                        SWOrder swOrder = new SWOrder();
+                        swOrder.OrderName = arrOrderName[i];
+                        if (arrOrderSort != null && arrOrderSort.Length > i && !string.IsNullOrEmpty(arrOrderSort[i]))
+                        {
+                            swOrder.AscOrDesc = Const.ASC.ToLower().Equals(arrOrderSort[i].ToLower()) ? AscOrDesc.Asc : AscOrDesc.Desc;
+                        }
+                        orderList.Add(swOrder);
+                    }
+                }
+                else
+                {
+                    //TODO Log
+                    orderList.Add(new SWOrder() { OrderName = Const.DEFAULT_FIELD });
+                }
+                pageSize = paging.PageSize;
+                pageIndex = paging.PageIndex;
+            }
+            return GetModelListWithCount<T>(expression, out count, orderList, pageSize, pageIndex);
+        }
+
+        /// <summary>
+        /// 获取数据集合并返回集合总数
+        /// </summary>
+        /// <typeparam name="T1"></typeparam>
+        /// <typeparam name="T2"></typeparam>
+        /// <param name="searchParameter"></param>
+        /// <param name="count"></param>
+        /// <returns></returns>
+        private List<T1> GetModelListWithCount<T1, T2>(SearchParameter<T1, T2> searchParameter, out int count) where T1 : new()
+        {
+            count = -1;
+            List<SWDbParameter> parameters = new List<SWDbParameter>();
+            string sql = null;
+            if (SWClient.CurDBType == DBType.SQLServer)
+            {
+                sql = SearchSqlBuilder.GetModelListWithCount<T1, T2>(ref parameters, searchParameter);
+            }
+            else
+            {
+                sql = MySqlSearchSqlBuilder.GetModelListWithCount<T1, T2>(ref parameters, searchParameter);
+            }
+
+            if (string.IsNullOrEmpty(sql))
+            {
+                return null;
+            }
+            //执行sql语句
+            return DataConvertListWithCount<T1>(sql, parameters, out count);
+        }
+
+        /// <summary>
+        /// 执行sql并返回集合列表及集合总数
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="sql"></param>
+        /// <param name="parameters"></param>
+        /// <param name="count"></param>
+        /// <returns></returns>
         private List<T> DataConvertListWithCount<T>(string sql, List<SWDbParameter> parameters, out int count) where T : new()
         {
             count = -1;
@@ -925,7 +1513,6 @@ namespace sw.orm
                         count = Convert.ToInt32(countTable.Rows[0][0].ToString());
                     }
                 }
-
                 DataTable dataTable = dataSet.Tables[0];
                 if (dataTable != null && dataTable.Rows.Count > 0)
                 {
@@ -942,93 +1529,179 @@ namespace sw.orm
             return null;
         }
 
-        public override List<T> GetModelList<T>(Expression<Func<T, bool>> expression, SWPaging paging)
+        #endregion
+
+        #region 获取数据列表前n条数据
+
+        /// <summary>
+        /// 获取数据列表前n条数据，含排序(单个排序字段：lambda表达式)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        /// <param name="orderBy"></param>
+        /// <param name="ascOrDesc"></param>
+        /// <param name="top"></param>
+        /// <returns></returns>
+        public override List<T> GetTopModelList<T>(Expression<Func<T, bool>> expression, Expression<Func<T, object>> orderBy = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? top = null)
         {
-            string orderFieldName = null;
-            AscOrDesc ascOrDesc = AscOrDesc.Desc;
-            int? pageSize = null;
-            int? pageIndex = null;
-            if (paging != null)
+            SearchParameter<T, bool> searchParameter = new SearchParameter<T, bool>
             {
-                orderFieldName = paging.Sort;
-                if (!string.IsNullOrEmpty(orderFieldName))
-                {
-                    ascOrDesc = Const.ASC.ToLower().Equals(paging.Order.ToLower()) ? AscOrDesc.Asc : AscOrDesc.Desc;
-                }
-                else
-                {
-                    //TODO Log
-                    orderFieldName = Const.DEFAULT_FIELD;
-                }
-                pageSize = paging.PageSize;
-                pageIndex = paging.PageIndex;
-            }
-            return GetModelList<T>(expression, orderFieldName, ascOrDesc, pageSize, pageIndex);
+                FilterExp = expression,
+                OrderByExp = orderBy,
+                AscOrDesc = ascOrDesc,
+                Top = top
+            };
+            return GetModelList<T, bool>(searchParameter);
         }
 
-        public override List<T> GetModelListWithCount<T>(Expression<Func<T, bool>> expression, out int count, SWPaging paging)
+        /// <summary>
+        /// 获取数据列表前n条数据，含排序(多个排序字段：lambda表达式)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        /// <param name="orderByList"></param>
+        /// <param name="top"></param>
+        /// <returns></returns>
+        public override List<T> GetTopModelList<T>(Expression<Func<T, bool>> expression, List<SWOrder<T>> orderByList = null, int? top = null)
         {
-            string orderFieldName = null;
-            AscOrDesc ascOrDesc = AscOrDesc.Desc;
-            int? pageSize = null;
-            int? pageIndex = null;
-            if (paging != null)
+            SearchParameter<T, bool> searchParameter = new SearchParameter<T, bool>
             {
-                orderFieldName = paging.Sort;
-                if (!string.IsNullOrEmpty(orderFieldName))
-                {
-                    ascOrDesc = Const.ASC.ToLower().Equals(paging.Order.ToLower()) ? AscOrDesc.Asc : AscOrDesc.Desc;
-                }
-                else
-                {
-                    //TODO Log
-                    orderFieldName = Const.DEFAULT_FIELD;
-                }
-                pageSize = paging.PageSize;
-                pageIndex = paging.PageIndex;
-            }
-            return GetModelListWithCount<T>(expression, out count, orderFieldName, ascOrDesc, pageSize, pageIndex);
+                FilterExp = expression,
+                OrderByExpList = orderByList,
+                Top = top
+            };
+            return GetModelList<T, bool>(searchParameter);
         }
 
-        public override int GetCount<T>(Where<T> where)
+        /// <summary>
+        /// 获取数据列表前n条数据，含排序(单个排序字段：字符串)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        /// <param name="orderFieldName"></param>
+        /// <param name="ascOrDesc"></param>
+        /// <param name="top"></param>
+        /// <returns></returns>
+        public override List<T> GetTopModelList<T>(Expression<Func<T, bool>> expression, string orderFieldName = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? top = null)
         {
-            Expression<Func<T, bool>> expression = null;
-            if (where != null && where.GetExpression() != null)
+            SearchParameter<T, bool> searchParameter = new SearchParameter<T, bool>
             {
-                expression = where.GetExpression();
-            }
-            return GetCount<T>(expression);
+                FilterExp = expression,
+                OrderStr = orderFieldName,
+                AscOrDesc = ascOrDesc,
+                Top = top
+            };
+            return GetModelList<T, bool>(searchParameter);
         }
 
-        public override List<T> GetModelList<T>(Where<T> where)
+        /// <summary>
+        /// 获取数据列表前n条数据，含排序(多个排序字段：字符串)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        /// <param name="orderFieldNameList"></param>
+        /// <param name="top"></param>
+        /// <returns></returns>
+        public override List<T> GetTopModelList<T>(Expression<Func<T, bool>> expression, List<SWOrder> orderFieldNameList = null, int? top = null)
         {
-            if (where == null || where.GetExpression() == null)
+            SearchParameter<T, bool> searchParameter = new SearchParameter<T, bool>
             {
-                return GetModelList<T>();
-            }
-            return GetModelList<T>(where.GetExpression());
+                FilterExp = expression,
+                OrderStrList = orderFieldNameList,
+                Top = top
+            };
+            return GetModelList<T, bool>(searchParameter);
         }
 
-        public override List<T> GetModelList<T>(Where<T> where, Expression<Func<T, object>> orderBy = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null)
+        /// <summary>
+        /// 获取数据列表前n条数据，含排序(单个排序字段：lambda表达式)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        /// <param name="orderBy"></param>
+        /// <param name="ascOrDesc"></param>
+        /// <param name="top"></param>
+        /// <returns></returns>
+        public override List<T> GetTopModelList<T>(Expression<Func<T, T>> expression, Expression<Func<T, object>> orderBy = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? top = null)
         {
-            Expression<Func<T, bool>> expression = null;
-            if (where != null && where.GetExpression() != null)
+            SearchParameter<T, T> searchParameter = new SearchParameter<T, T>
             {
-                expression = where.GetExpression();
-            }
-            return GetModelList<T>(expression, orderBy, ascOrDesc, pageSize, pageIndex);
+                FilterExp = expression,
+                OrderByExp = orderBy,
+                AscOrDesc = ascOrDesc,
+                Top = top
+            };
+            return GetModelList<T, T>(searchParameter);
         }
 
-        public override List<T> GetModelListWithCount<T>(Where<T> where, out int count, Expression<Func<T, object>> orderBy = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null)
+        /// <summary>
+        /// 获取数据列表前n条数据，含排序(多个排序字段：lambda表达式)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        /// <param name="orderByList"></param>
+        /// <param name="top"></param>
+        /// <returns></returns>
+        public override List<T> GetTopModelList<T>(Expression<Func<T, T>> expression, List<SWOrder<T>> orderByList = null, int? top = null)
         {
-            Expression<Func<T, bool>> expression = null;
-            if (where != null && where.GetExpression() != null)
+            SearchParameter<T, T> searchParameter = new SearchParameter<T, T>
             {
-                expression = where.GetExpression();
-            }
-            return GetModelListWithCount<T>(expression, out count, orderBy, ascOrDesc, pageSize, pageIndex);
+                FilterExp = expression,
+                OrderByExpList = orderByList,
+                Top = top
+            };
+            return GetModelList<T, T>(searchParameter);
         }
 
+        /// <summary>
+        /// 获取数据列表前n条数据，含排序(单个排序字段：字符串)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        /// <param name="orderFieldName"></param>
+        /// <param name="ascOrDesc"></param>
+        /// <param name="top"></param>
+        /// <returns></returns>
+        public override List<T> GetTopModelList<T>(Expression<Func<T, T>> expression, string orderFieldName = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? top = null)
+        {
+            SearchParameter<T, T> searchParameter = new SearchParameter<T, T>
+            {
+                FilterExp = expression,
+                OrderStr = orderFieldName,
+                AscOrDesc = ascOrDesc,
+                Top = top
+            };
+            return GetModelList<T, T>(searchParameter);
+        }
+
+        /// <summary>
+        /// 获取数据列表前n条数据，含排序(多个排序字段：字符串)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="expression"></param>
+        /// <param name="orderFieldNameList"></param>
+        /// <param name="top"></param>
+        /// <returns></returns>
+        public override List<T> GetTopModelList<T>(Expression<Func<T, T>> expression, List<SWOrder> orderFieldNameList = null, int? top = null)
+        {
+            SearchParameter<T, T> searchParameter = new SearchParameter<T, T>
+            {
+                FilterExp = expression,
+                OrderStrList = orderFieldNameList,
+                Top = top
+            };
+            return GetModelList<T, T>(searchParameter);
+        }
+
+        /// <summary>
+        /// 根据Where条件获取数据列表前n条数据，含排序(单个排序字段：lambda表达式)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="where"></param>
+        /// <param name="orderBy"></param>
+        /// <param name="ascOrDesc"></param>
+        /// <param name="top"></param>
+        /// <returns></returns>
         public override List<T> GetTopModelList<T>(Where<T> where, Expression<Func<T, object>> orderBy = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? top = null)
         {
             Expression<Func<T, bool>> expression = null;
@@ -1039,86 +1712,33 @@ namespace sw.orm
             return GetTopModelList<T>(expression, orderBy, ascOrDesc, top);
         }
 
-        public override List<T> GetModelList<T>(Where<T> where, string orderFieldName = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null)
+        /// <summary>
+        /// 根据Where条件获取数据列表前n条数据，含排序(多个排序字段：lambda表达式)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="where"></param>
+        /// <param name="orderByList"></param>
+        /// <param name="top"></param>
+        /// <returns></returns>
+        public override List<T> GetTopModelList<T>(Where<T> where, List<SWOrder<T>> orderByList = null, int? top = null)
         {
             Expression<Func<T, bool>> expression = null;
             if (where != null && where.GetExpression() != null)
             {
                 expression = where.GetExpression();
             }
-            return GetModelList<T>(expression, orderFieldName, ascOrDesc, pageSize, pageIndex);
+            return GetTopModelList<T>(expression, orderByList, top);
         }
 
-        public override List<T> GetModelList<T>(Where<T> where, SWPaging paging)
-        {
-            Expression<Func<T, bool>> expression = null;
-            if (where != null && where.GetExpression() != null)
-            {
-                expression = where.GetExpression();
-            }
-
-            string orderFieldName = null;
-            AscOrDesc ascOrDesc = AscOrDesc.Desc;
-            int? pageSize = null;
-            int? pageIndex = null;
-            if (paging != null)
-            {
-                orderFieldName = paging.Sort;
-                if (!string.IsNullOrEmpty(orderFieldName))
-                {
-                    ascOrDesc = Const.ASC.ToLower().Equals(paging.Order.ToLower()) ? AscOrDesc.Asc : AscOrDesc.Desc;
-                }
-                else
-                {
-                    //TODO Log
-                    orderFieldName = Const.DEFAULT_FIELD;
-                }
-                pageSize = paging.PageSize;
-                pageIndex = paging.PageIndex;
-            }
-            return GetModelList<T>(expression, orderFieldName, ascOrDesc, pageSize, pageIndex);
-        }
-
-        public override List<T> GetModelListWithCount<T>(Where<T> where, out int count, string orderFieldName = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? pageSize = null, int? pageIndex = null)
-        {
-            Expression<Func<T, bool>> expression = null;
-            if (where != null && where.GetExpression() != null)
-            {
-                expression = where.GetExpression();
-            }
-            return GetModelListWithCount<T>(expression, out count, orderFieldName, ascOrDesc, pageSize, pageIndex);
-        }
-
-        public override List<T> GetModelListWithCount<T>(Where<T> where, out int count, SWPaging paging)
-        {
-            Expression<Func<T, bool>> expression = null;
-            if (where != null && where.GetExpression() != null)
-            {
-                expression = where.GetExpression();
-            }
-
-            string orderFieldName = null;
-            AscOrDesc ascOrDesc = AscOrDesc.Desc;
-            int? pageSize = null;
-            int? pageIndex = null;
-            if (paging != null)
-            {
-                orderFieldName = paging.Sort;
-                if (!string.IsNullOrEmpty(orderFieldName))
-                {
-                    ascOrDesc = Const.ASC.ToLower().Equals(paging.Order.ToLower()) ? AscOrDesc.Asc : AscOrDesc.Desc;
-                }
-                else
-                {
-                    //TODO Log
-                    orderFieldName = Const.DEFAULT_FIELD;
-                }
-                pageSize = paging.PageSize;
-                pageIndex = paging.PageIndex;
-            }
-            return GetModelListWithCount<T>(expression, out count, orderFieldName, ascOrDesc, pageSize, pageIndex);
-        }
-
+        /// <summary>
+        /// 根据Where条件获取数据列表前n条数据，含排序(单个排序字段：字符串)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="where"></param>
+        /// <param name="orderFieldName"></param>
+        /// <param name="ascOrDesc"></param>
+        /// <param name="top"></param>
+        /// <returns></returns>
         public override List<T> GetTopModelList<T>(Where<T> where, string orderFieldName = null, AscOrDesc ascOrDesc = AscOrDesc.Asc, int? top = null)
         {
             Expression<Func<T, bool>> expression = null;
@@ -1129,7 +1749,29 @@ namespace sw.orm
             return GetTopModelList<T>(expression, orderFieldName, ascOrDesc, top);
         }
 
+        /// <summary>
+        /// 根据Where条件获取数据列表前n条数据，含排序(多个排序字段：字符串)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="where"></param>
+        /// <param name="orderFieldNameList"></param>
+        /// <param name="top"></param>
+        /// <returns></returns>
+        public override List<T> GetTopModelList<T>(Where<T> where, List<SWOrder> orderFieldNameList = null, int? top = null)
+        {
+            Expression<Func<T, bool>> expression = null;
+            if (where != null && where.GetExpression() != null)
+            {
+                expression = where.GetExpression();
+            }
+            return GetTopModelList<T>(expression, orderFieldNameList, top);
+        }
+
         #endregion
+
+        #endregion
+
+        #region 直接执行存储过程/SQL
 
         /// <summary>
         /// 执行存储过程返回实体类集合
@@ -1158,5 +1800,7 @@ namespace sw.orm
         {
             return sqlHelper.ExecuteDataSet(sql, sqlParameter);
         }
+
+        #endregion
     }
 }

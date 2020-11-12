@@ -27,8 +27,12 @@ namespace sw.orm
         /// </summary>
         public bool IsPrimarykey { get; set; }
 
+        /// <summary>
+        /// 是否自增列(或不可显示修改列，例如sql server中timestamp类型)
+        /// </summary>
+        public bool IsIdentity { get; set; }
+
         //public bool IsNullable { get; set; }
-        //public bool IsIdentity { get; set; }
 
     }
 

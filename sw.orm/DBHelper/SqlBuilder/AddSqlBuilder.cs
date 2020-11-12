@@ -39,7 +39,8 @@ namespace sw.orm
             foreach (EntityColumnInfo columnInfo in entityInfo.Columns)
             {
                 var value = columnInfo.PropertyInfo.GetValue(tParameter);
-                if (value == null || value.ToString() == default(DateTime).ToString())
+                //为空或为自增列时，无需插入
+                if (value == null || value.ToString() == default(DateTime).ToString() || columnInfo.IsIdentity)
                 {
                     continue;
                 }

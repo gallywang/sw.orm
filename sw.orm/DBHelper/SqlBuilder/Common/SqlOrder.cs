@@ -21,6 +21,10 @@ namespace sw.orm
         {
             //排序字段
             string strOrder = string.Empty;
+            if(searchParameter == null)
+            {
+                return strOrder;
+            }
             //根据实体指定字段
             if (searchParameter.OrderByExp != null)
             {
@@ -45,17 +49,17 @@ namespace sw.orm
             }
 
             //根据多个字段排序(实体指定字段)
-            if (searchParameter.OrderByExps != null && searchParameter.OrderByExps.Count > 0)
+            if (searchParameter.OrderByExpList != null && searchParameter.OrderByExpList.Count > 0)
             {
                 string orderExpMulti = string.Empty;
-                for (int i = 0; i < searchParameter.OrderByExps.Count; i++)
+                for (int i = 0; i < searchParameter.OrderByExpList.Count; i++)
                 {
-                    Expression exp = searchParameter.OrderByExps[i].OrderBy.Body as Expression;
+                    Expression exp = searchParameter.OrderByExpList[i].OrderBy.Body as Expression;
                     var strOrderTemp = ExpressionProvider.AnalyzeWithoutParams(exp);
                     if (strOrderTemp != null)
                     {
                         strOrder = strOrderTemp.ToString() + ",";
-                        orderExpMulti += string.Format("{0} {1},", strOrderTemp.ToString(), searchParameter.OrderByExps[i].AscOrDesc.ToString());
+                        orderExpMulti += string.Format("{0} {1},", strOrderTemp.ToString(), searchParameter.OrderByExpList[i].AscOrDesc.ToString());
                     }
                 }
 
@@ -74,14 +78,14 @@ namespace sw.orm
             }
 
             //根据多个字段排序(字段名)
-            if (searchParameter.OrderStrs != null && searchParameter.OrderStrs.Count > 0)
+            if (searchParameter.OrderStrList != null && searchParameter.OrderStrList.Count > 0)
             {
                 string orderStrMulti = string.Empty;
-                for (int i = 0; i < searchParameter.OrderStrs.Count; i++)
+                for (int i = 0; i < searchParameter.OrderStrList.Count; i++)
                 {
-                    if (!string.IsNullOrEmpty(searchParameter.OrderStrs[i].OrderName))
+                    if (!string.IsNullOrEmpty(searchParameter.OrderStrList[i].OrderName))
                     {
-                        orderStrMulti += string.Format("{0} {1},", searchParameter.OrderStrs[i].OrderName, searchParameter.OrderStrs[i].AscOrDesc.ToString());
+                        orderStrMulti += string.Format("{0} {1},", searchParameter.OrderStrList[i].OrderName, searchParameter.OrderStrList[i].AscOrDesc.ToString());
                     }
                 }
 

@@ -49,5 +49,15 @@ namespace sw.orm
             get { return _IsPrimaryKey; }
             set { _IsPrimaryKey = value; }
         }
+
+        /// <summary>
+        /// 是否为自增键/Sqlserver中timestamp类型
+        /// </summary>
+        private bool _IsIdentity;
+        public bool IsIdentity
+        {
+            get { return _IsIdentity; }
+            set { _IsIdentity = value; }
+        }
     }
 }

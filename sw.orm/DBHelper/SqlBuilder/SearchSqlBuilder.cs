@@ -46,6 +46,34 @@ namespace sw.orm
             return sbSql.ToString();
         }
 
+        /// <summary>
+        /// 根据ID查找单个记录
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="id"></param>
+        /// <param name="parameters"></param>
+        /// <returns></returns>
+        public static string GetModel<T>(int id, ref List<SWDbParameter> parameters)
+        {
+            //筛选条件
+            string strWhere = " WHERE ID = @ID";
+            //拼接查询sql
+            StringBuilder sbSql = new StringBuilder();
+            string dbTableName = string.Empty;
+            //获取查询字段，字段信息为空则不查询
+            string sqlFields = SqlFields.Analysis<T>(out dbTableName);
+            if (string.IsNullOrEmpty(sqlFields))
+            {
+                return null;
+            }
+            //必须拥有字段ID
+            SWDbParameter parameter = new SWDbParameter("ID", id, DbType.Int32);
+            parameters.Add(parameter);
+            sbSql.AppendFormat("SELECT {0} FROM {1} {2}", sqlFields, dbTableName, strWhere);
+
+            return sbSql.ToString();
+        }
+
         #endregion
 
         #region 总条数查询
@@ -127,7 +155,7 @@ namespace sw.orm
 
             //拼接sql语句
             StringBuilder sbSql = new StringBuilder();
-            if (searchParameter.Top != null)
+            if (searchParameter != null && searchParameter.Top != null)
             {
                 sbSql.AppendFormat("SELECT TOP {0} {1} FROM {2} {3}", searchParameter.Top, sqlFields, dbTableName, strWhere);
             }
@@ -141,7 +169,7 @@ namespace sw.orm
                 sbSql.AppendFormat(" {0} ", strOrder);
             }
 
-            if (searchParameter.Top == null)
+            if (searchParameter != null && searchParameter.Top == null)
             {
                 if (searchParameter.PageSize == null && searchParameter.PageIndex == null)
                 {
@@ -189,7 +217,7 @@ namespace sw.orm
                 return null;
             }
 
-            if (searchParameter.Top != null)
+            if (searchParameter != null && searchParameter.Top != null)
             {
                 sbSql.AppendFormat("SELECT TOP {0} {1} FROM {2} {3}", searchParameter.Top, sqlFields, dbTableName, strWhere);
             }
@@ -203,7 +231,7 @@ namespace sw.orm
                 sbSql.AppendFormat(" {0} ", strOrder);
             }
 
-            if (searchParameter.Top == null)
+            if (searchParameter != null && searchParameter.Top == null)
             {
                 if (searchParameter.PageSize == null && searchParameter.PageIndex == null)
                 {

@@ -30,12 +30,12 @@ namespace sw.orm
         /// <summary>
         /// 根据多列进行排序
         /// </summary>
-        public List<SWOrder> OrderStrs { get; set; }
+        public List<SWOrder> OrderStrList { get; set; }
 
         /// <summary>
         /// 根据多列进行排序(指定实体类字段)
         /// </summary>
-        public List<SWOrder<T1>> OrderByExps { get; set; }
+        public List<SWOrder<T1>> OrderByExpList { get; set; }
 
         /// <summary>
         /// 排序方式(默认升序排序)

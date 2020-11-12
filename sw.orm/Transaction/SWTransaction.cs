@@ -238,6 +238,25 @@ namespace sw.orm
             }
         }
 
+        /// <summary>
+        /// 根据Where条件删除，条件为空时删除所有记录
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="where"></param>
+        public void Delete<T>(Where<T> where)
+        {
+            if (where != null && where.GetExpression() != null)
+            {
+                List<SWDbParameter> parameters = new List<SWDbParameter>();
+                string sql = DeleteSqlBuilder.Delete<T>(where.GetExpression(), ref parameters);
+                if (!string.IsNullOrEmpty(sql))
+                {
+                    sqlList.Add(sql);
+                    parametersList.Add(parameters);
+                }
+            } 
+        }
+
         public void CommitTran()
         {
             IDBHelper sqlHelper;

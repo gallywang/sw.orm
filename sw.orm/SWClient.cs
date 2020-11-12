@@ -40,7 +40,7 @@ namespace sw.orm
                     sqlClient = new SqlClient(_conn, dBType);
                     break;
                 case DBType.Mongo:
-                    sqlClient = new MongodbClient(_conn);
+                    //sqlClient = new MongodbClient(_conn);
                     break;
                 default:
                     throw new Exception(message: string.Format("{0} not support.", dBType.ToString()));

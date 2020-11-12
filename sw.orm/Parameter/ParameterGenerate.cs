@@ -64,6 +64,10 @@ namespace sw.orm
             {
                 return new SWDbParameter(columnName, value, DbType.Guid);
             }
+            else if (typeof(DateTimeOffset) == type || typeof(Nullable<DateTimeOffset>) == type)
+            {
+                return new SWDbParameter(columnName, value, DbType.DateTimeOffset);
+            }
             else if (typeof(byte[]) == type)
             {
                 return new SWDbParameter(columnName, value, DbType.Binary);

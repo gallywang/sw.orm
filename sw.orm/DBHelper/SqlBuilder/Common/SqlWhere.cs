@@ -23,7 +23,7 @@ namespace sw.orm
         public static string Analysis<T1, T2>(ref List<SWDbParameter> parameters, SearchParameter<T1, T2> searchParameter)
         {
             string strSql = string.Empty;
-            if (searchParameter.FilterExp != null)
+            if (searchParameter != null && searchParameter.FilterExp != null)
             {
                 ExpressionContext context = new ExpressionContext();
                 Expression exp = searchParameter.FilterExp.Body as Expression;

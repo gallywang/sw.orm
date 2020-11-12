@@ -349,35 +349,58 @@ namespace sw.orm
             SqlParameter[] sqlParameters = new SqlParameter[parameters.Count];
             for (int i = 0, count = parameters.Count; i < count; i++)
             {
+                SqlDbType dbType;
                 switch (parameters[i].ParameterDbType)
                 {
-                    case DbType.Int32:
-                        sqlParameters[i] = new SqlParameter(string.Format("@{0}", parameters[i].ParameterName), SqlDbType.Int) { Value = parameters[i].ParameterValue };
+                    case DbType.Int64:
+                        dbType = SqlDbType.BigInt;
                         break;
-                    case DbType.DateTime:
-                        sqlParameters[i] = new SqlParameter(string.Format("@{0}", parameters[i].ParameterName), SqlDbType.DateTime) { Value = parameters[i].ParameterValue };
-                        break;
-                    case DbType.String:
-                        sqlParameters[i] = new SqlParameter(string.Format("@{0}", parameters[i].ParameterName), SqlDbType.NVarChar) { Value = parameters[i].ParameterValue };
+                    case DbType.Binary:
+                        dbType = SqlDbType.Binary;
                         break;
                     case DbType.Boolean:
-                        sqlParameters[i] = new SqlParameter(string.Format("@{0}", parameters[i].ParameterName), SqlDbType.Bit) { Value = parameters[i].ParameterValue };
+                        dbType = SqlDbType.Bit;
+                        break;
+                    case DbType.String:
+                        dbType = SqlDbType.NVarChar;
+                        break;
+                    case DbType.Int32:
+                        dbType = SqlDbType.Int;
+                        break;
+                    case DbType.DateTime:
+                        dbType = SqlDbType.DateTime;
                         break;
                     case DbType.Byte:
-                        sqlParameters[i] = new SqlParameter(string.Format("@{0}", parameters[i].ParameterName), SqlDbType.TinyInt) { Value = parameters[i].ParameterValue };
+                        dbType = SqlDbType.TinyInt;
+                        break;
+                    case DbType.SByte:
+                        dbType = SqlDbType.Binary;
                         break;
                     case DbType.Decimal:
-                        sqlParameters[i] = new SqlParameter(string.Format("@{0}", parameters[i].ParameterName), SqlDbType.Decimal) { Value = parameters[i].ParameterValue };
+                        dbType = SqlDbType.Decimal;
                         break;
                     case DbType.UInt16:
-                        sqlParameters[i] = new SqlParameter(string.Format("@{0}", parameters[i].ParameterName), SqlDbType.SmallInt) { Value = parameters[i].ParameterValue };
+                        dbType = SqlDbType.SmallInt;
                         break;
                     case DbType.UInt64:
-                        sqlParameters[i] = new SqlParameter(string.Format("@{0}", parameters[i].ParameterName), SqlDbType.BigInt) { Value = parameters[i].ParameterValue };
+                        dbType = SqlDbType.BigInt;
+                        break;
+                    case DbType.Single:
+                        dbType = SqlDbType.Real;
+                        break;
+                    case DbType.Guid:
+                        dbType = SqlDbType.UniqueIdentifier;
+                        break;
+                    case DbType.DateTimeOffset:
+                        dbType = SqlDbType.DateTimeOffset;
+                        break;
+                    case DbType.Time:
+                        dbType = SqlDbType.Time;
                         break;
                     default:
                         throw new Exception(message: string.Format("DbType:{0}转SqlDbType失败", parameters[i].ParameterDbType.ToString()));
                 }
+                sqlParameters[i] = new SqlParameter(string.Format("@{0}", parameters[i].ParameterName), dbType) { Value = parameters[i].ParameterValue };
             }
             return sqlParameters;
         }

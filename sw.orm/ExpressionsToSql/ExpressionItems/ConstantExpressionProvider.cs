@@ -7,7 +7,7 @@ namespace sw.orm
 {
     public class ConstantExpressionProvider
     {
-        public static string Analyze(Expression exp)
+        public static object Analyze(Expression exp)
         {
             ConstantExpression ce = exp as ConstantExpression;
             if (ce.Value == null)
@@ -28,7 +28,7 @@ namespace sw.orm
             }
             else
             {
-                return string.Format("{0}", ce.Value);
+                return ce.Value;
             }
         }
     }

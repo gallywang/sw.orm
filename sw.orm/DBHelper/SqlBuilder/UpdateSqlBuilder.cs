@@ -34,6 +34,11 @@ namespace sw.orm
             //获取类各个属性(对应数据库字段)
             foreach (EntityColumnInfo info in entityInfo.Columns)
             {
+                //为自增列时跳过
+                if (info.IsIdentity)
+                {
+                    continue;
+                }
                 //当某个字段未赋值时，不插入
                 //当数据类型为日期类型时，未赋值，GetValue得到的结果是{0001/1/1 0:00:00} == default(DateTime)或DateTime.MinValue
                 //获取该列的值
@@ -45,8 +50,7 @@ namespace sw.orm
                 }
                 else
                 {
-
-                    //获取列名
+                    //获取更新列及更新条件(默认以主键为更新条件)
                     if (typeof(int) == info.ColumnType || typeof(Nullable<int>) == info.ColumnType)
                     {
                         if (info.IsPrimarykey)
@@ -82,6 +86,54 @@ namespace sw.orm
                             sbUpdateColumns.AppendFormat(" {0} = @{0},", info.DbColumnName);
                         }
                         parameterList.Add(new SWDbParameter(info.DbColumnName, value, DbType.DateTime));
+                    }
+                    else if (typeof(byte[]) == info.ColumnType)
+                    {
+                        if (info.IsPrimarykey)
+                        {
+                            sbUpdateConditions.AppendFormat(" {0} = @{0} and ", info.DbColumnName);
+                        }
+                        else
+                        {
+                            sbUpdateColumns.AppendFormat(" {0} = @{0},", info.DbColumnName);
+                        }
+                        parameterList.Add(new SWDbParameter(info.DbColumnName, value, DbType.SByte));
+                    }
+                    else if (typeof(DateTimeOffset) == info.ColumnType || typeof(Nullable<DateTimeOffset>) == info.ColumnType)
+                    {
+                        if (info.IsPrimarykey)
+                        {
+                            sbUpdateConditions.AppendFormat(" {0} = @{0} and ", info.DbColumnName);
+                        }
+                        else
+                        {
+                            sbUpdateColumns.AppendFormat(" {0} = @{0},", info.DbColumnName);
+                        }
+                        parameterList.Add(new SWDbParameter(info.DbColumnName, value, DbType.DateTimeOffset));
+                    }
+                    else if (typeof(Guid) == info.ColumnType || typeof(Nullable<Guid>) == info.ColumnType)
+                    {
+                        if (info.IsPrimarykey)
+                        {
+                            sbUpdateConditions.AppendFormat(" {0} = @{0} and ", info.DbColumnName);
+                        }
+                        else
+                        {
+                            sbUpdateColumns.AppendFormat(" {0} = @{0},", info.DbColumnName);
+                        }
+                        parameterList.Add(new SWDbParameter(info.DbColumnName, value, DbType.Guid));
+                    }
+                    else if (typeof(TimeSpan) == info.ColumnType || typeof(Nullable<TimeSpan>) == info.ColumnType)
+                    {
+                        if (info.IsPrimarykey)
+                        {
+                            sbUpdateConditions.AppendFormat(" {0} = @{0} and ", info.DbColumnName);
+                        }
+                        else
+                        {
+                            sbUpdateColumns.AppendFormat(" {0} = @{0},", info.DbColumnName);
+                        }
+                        parameterList.Add(new SWDbParameter(info.DbColumnName, value, DbType.Time));
                     }
                     else
                     {

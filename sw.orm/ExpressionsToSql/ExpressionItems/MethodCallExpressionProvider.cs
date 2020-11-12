@@ -102,6 +102,12 @@ namespace sw.orm
                 parameterList.Add(new SWDbParameter(string.Format("{0}{1}", left, count), right, ExpressionCompile.GetStrType(right)));
                 return string.Format("{0} = @{0}{1}", left, count);
             }
+            //解决bug，当条件where.Or(m => m.CustomerFollowupIds.Contains(request.UserIds[i])),即右侧为List<string>时，执行报错
+            //TODO 原理待查找,不能直接计算mce，需取其Object计算(TODO)
+            else if (mce.Method.Name == "get_Item")
+            {
+                return ExpressionCompile.GetGetStrCompileResult(mce.Object);
+            }
             else
             {
                 //throw new Exception(string.Format("哎哟喂，怎么又不支持格式了鸭,当前方法:{0}", mce.Method.Name));

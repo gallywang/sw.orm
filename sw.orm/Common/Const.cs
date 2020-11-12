@@ -50,5 +50,10 @@ namespace sw.orm
         /// 排序时以该字段进行排序
         /// </summary>
         public const string DEFAULT_FIELD = "ID";
+
+        /// <summary>
+        /// 分隔符comma
+        /// </summary>
+        public const char COMMA = ',';
     }
 }

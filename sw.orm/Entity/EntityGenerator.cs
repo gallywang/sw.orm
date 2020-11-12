@@ -56,6 +56,7 @@ namespace sw.orm
                     columnInfo.PropertyInfo = info;
                     columnInfo.ColumnType = info.PropertyType;
                     columnInfo.IsPrimarykey = isPrimaryKey;
+                    columnInfo.IsIdentity = swColumn.IsIdentity;
 
                     entityInfo.Columns.Add(columnInfo);
                 }

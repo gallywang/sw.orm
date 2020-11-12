@@ -32,23 +32,31 @@ namespace sw.orm
             {
                 return "NULL";
             }
-            else if (result is string)
+            else if (result.GetType() == typeof(bool) || result.GetType() == typeof(Boolean))
+            {
+                return Convert.ToBoolean(result);
+            }
+            else if (result.GetType() == typeof(string))
             {
                 return string.Format("{0}", result);
             }
-            else if (result is DateTime)
+            else if (result.GetType() == typeof(DateTime))
             {
                 return Convert.ToDateTime(result);
             }
-            else if (result is char)
+            else if (result.GetType() == typeof(char))
             {
                 return result;
             }
-            else if (result is int)
+            else if (result.GetType() == typeof(decimal) || result.GetType() == typeof(Decimal))
+            {
+                return Convert.ToDecimal(result);
+            }
+            else if (result.GetType() == typeof(int))
             {
                 return result;
             }
-            else if (result is int[])
+            else if (result.GetType() == typeof(int[]))
             {
                 var rl = result as int[];
                 if (rl.Length <= 0)
@@ -65,7 +73,7 @@ namespace sw.orm
                     return sbTmp.ToString().Substring(0, sbTmp.ToString().Length - 1);
                 }
             }
-            else if (result is List<int>)
+            else if (result.GetType() == typeof(List<int>))
             {
                 var rl = result as List<int>;
                 if (rl.Count <= 0)
@@ -82,7 +90,7 @@ namespace sw.orm
                     return sbTmp.ToString().Substring(0, sbTmp.ToString().Length - 1);
                 }
             }
-            else if (result is string[])
+            else if (result.GetType() == typeof(string[]))
             {
                 var rl = result as string[];
                 if (rl.Length <= 0)
@@ -99,7 +107,7 @@ namespace sw.orm
                     return sbTmp.ToString().Substring(0, sbTmp.ToString().Length - 1);
                 }
             }
-            else if (result is List<string>)
+            else if (result.GetType() == typeof(List<string>))
             {
                 var rl = result as List<string>;
                 if (rl.Count <= 0)
@@ -134,51 +142,64 @@ namespace sw.orm
             {
                 return System.Data.DbType.String;
             }
-            else if (result is bool)
+            else if (result.GetType() == typeof(bool) || result.GetType() == typeof(Boolean)
+                || result.GetType() == typeof(bool?) || result.GetType() == typeof(Boolean?))
             {
                 return System.Data.DbType.Boolean;
             }
-            else if (result is byte || result is Byte)
+            else if (result.GetType() == typeof(byte) || result.GetType() == typeof(Byte))
             {
                 return System.Data.DbType.Byte;
             }
-            else if (result is decimal || result is Decimal)
+            else if (result.GetType() == typeof(decimal) || result.GetType() == typeof(Decimal))
             {
                 return System.Data.DbType.Decimal;
             }
-            else if (result is float)
+            else if (result.GetType() == typeof(float))
             {
                 return System.Data.DbType.Double;
             }
-            else if (result is string)
+            else if (result.GetType() == typeof(string))
             {
                 return System.Data.DbType.String;
             }
-            else if (result is DateTime)
+            else if (result.GetType() == typeof(DateTime))
             {
                 return System.Data.DbType.DateTime;
             }
-            else if (result is char)
+            else if (result.GetType() == typeof(char))
             {
                 return System.Data.DbType.String;
             }
-            else if (result is int)
+            else if (result.GetType() == typeof(Int16))
+            {
+                return System.Data.DbType.Int16;
+            }
+            else if (result.GetType() == typeof(int) || result.GetType() == typeof(Int32))
             {
                 return System.Data.DbType.Int32;
             }
-            else if (result is int[])
+            else if (result.GetType() == typeof(Int32))
             {
                 return System.Data.DbType.Int32;
             }
-            else if (result is List<int>)
+            else if (result.GetType() == typeof(Int64))
+            {
+                return System.Data.DbType.Int64;
+            }
+            else if (result.GetType() == typeof(int[]))
             {
                 return System.Data.DbType.Int32;
             }
-            else if (result is string[])
+            else if (result.GetType() == typeof(List<int>))
+            {
+                return System.Data.DbType.Int32;
+            }
+            else if (result.GetType() == typeof(string[]))
             {
                 return System.Data.DbType.String;
             }
-            else if (result is List<string>)
+            else if (result.GetType() == typeof(List<string>))
             {
                 return System.Data.DbType.String;
             }
